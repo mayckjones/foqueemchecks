@@ -6,7 +6,7 @@ com Supabase.
 ## Estrutura
 
 - `index.html`: modo foco.
-- `organizer.html`: organizador de tarefas, blocos, subtarefas e importação de PDF.
+- `organizer.html`: organizador de tarefas, blocos, subtarefas, recorrência e importação de PDF.
 - `login.html`: autenticação.
 - `assets/css/`: estilos compartilhados.
 - `assets/js/`: configuração pública e sincronização com Supabase.
@@ -25,6 +25,7 @@ chave secreta, execute:
 
 ```text
 node scripts/check-project.cjs
+node scripts/check-recurrence.cjs
 ```
 
 Antes de publicar, siga `docs/CONFIGURAR_SUPABASE.md` e mantenha no navegador

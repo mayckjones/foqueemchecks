@@ -16,7 +16,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-    <link rel="stylesheet" href="assets/css/organizer.css?v=20260918-block-swap">
+    <link rel="stylesheet" href="assets/css/organizer.css?v=20260920-recurrence">
 </head>
 <body>
 
@@ -199,6 +199,14 @@
             </div>
         </div>
         <div class="side-panel-body">
+            <div class="task-options-section">
+                <div class="subtasks-title">Opções</div>
+                <button class="task-option-row" id="side-panel-repeat" type="button">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="17 1 21 5 17 9"></polyline><path d="M3 11V9a4 4 0 0 1 4-4h14"></path><polyline points="7 23 3 19 7 15"></polyline><path d="M21 13v2a4 4 0 0 1-4 4H3"></path></svg>
+                    <span>Repetir</span>
+                    <small id="side-panel-repeat-value">Não repetir</small>
+                </button>
+            </div>
             <div class="subtasks-section">
                 <div class="subtasks-title">Subtarefas</div>
                 <div class="subtask-list" id="subtask-list">
@@ -225,6 +233,7 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.116.0"></script>
     <script src="assets/js/supabase-config.js"></script>
     <script src="assets/js/supabase-sync.js"></script>
-    <script src="assets/js/organizer.js?v=20260918-block-wheel-speed3"></script>
+    <script src="assets/js/recurrence.js?v=20260920-recurrence"></script>
+    <script src="assets/js/organizer.js?v=20260920-recurrence"></script>
 </body>
 </html>

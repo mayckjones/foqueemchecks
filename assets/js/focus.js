@@ -174,7 +174,20 @@ function syncTaskStateWithOrganizer(taskObj, targetBlockId, completeMainTask = t
             if (targetBlockId && b.id !== targetBlockId) continue;
             for (const t of b.tasks) {
                 if (t.id === taskObj.id) {
-                    if (completeMainTask) t.completed = true;
+                    if (completeMainTask) {
+                        t.completed = true;
+                        t.completedAt = new Date().toISOString();
+                        const recurrence = window.FocusRecurrence?.normalize(t.recurrence);
+                        if (recurrence && !recurrence.nextDate && !recurrence.spawnedTaskId) {
+                            const referenceDate = window.FocusRecurrence.today();
+                            const exactDate = (t.days || []).find(day => window.FocusRecurrence.parseLocalDate(day));
+                            t.recurrence = {
+                                ...window.FocusRecurrence.configOnly(recurrence),
+                                seriesId: recurrence.seriesId || `series_${t.id}`,
+                                nextDate: window.FocusRecurrence.getNextDate(exactDate || referenceDate, recurrence, referenceDate),
+                            };
+                        }
+                    }
                     t.subtasks = taskObj.subtasks || [];
                     updated = true;
                     break;

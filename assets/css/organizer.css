@@ -1200,6 +1200,23 @@ textarea.task-text-input:focus-visible {
     display: block;
 }
 
+.recurrence-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    border: 1px solid color-mix(in srgb, var(--primary) 24%, transparent);
+    border-radius: 10px;
+    background: var(--primary-light);
+    color: var(--primary);
+    font: 600 10px var(--font);
+}
+
+.recurrence-chip svg {
+    width: 11px;
+    height: 11px;
+}
+
 .task-actions {
     display: flex;
     align-items: center;
@@ -1239,6 +1256,11 @@ textarea.task-text-input:focus-visible {
 .task-action-btn:hover {
     background: var(--bg-secondary);
     color: var(--text);
+}
+
+.repeat-action-btn.active {
+    background: var(--primary-light);
+    color: var(--primary);
 }
 
 .task-action-btn:active,
@@ -1386,6 +1408,123 @@ textarea:focus-visible {
 .day-picker-action.confirm {
     background: var(--primary);
     border-color: var(--primary);
+    color: white;
+}
+
+/* ========== REPEAT PICKER DROPDOWN ========== */
+.repeat-picker {
+    position: absolute;
+    top: calc(100% + 4px);
+    right: 0;
+    z-index: 80;
+    width: min(260px, calc(100vw - 32px));
+    padding: 8px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+    box-shadow: var(--shadow-lg);
+    color: var(--text);
+    animation: dropIn 0.15s ease;
+}
+
+.repeat-picker-title {
+    padding: 5px 8px 8px;
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.45px;
+}
+
+.repeat-picker-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    min-height: 34px;
+    padding: 7px 9px;
+    border: 0;
+    border-radius: var(--radius-xs);
+    background: transparent;
+    color: var(--text);
+    font: 500 12px var(--font);
+    text-align: left;
+}
+
+.repeat-picker-item:hover,
+.repeat-picker-item[aria-pressed="true"] {
+    background: var(--primary-light);
+    color: var(--primary);
+}
+
+.repeat-custom-controls {
+    display: grid;
+    grid-template-columns: auto 58px 1fr;
+    align-items: center;
+    gap: 7px;
+    margin: 7px 2px 2px;
+    padding: 9px;
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius-xs);
+    background: var(--bg-secondary);
+    font-size: 11px;
+    color: var(--text-secondary);
+}
+
+.repeat-custom-controls[hidden] {
+    display: none;
+}
+
+.repeat-interval-input,
+.repeat-unit-select {
+    min-width: 0;
+    height: 30px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-xs);
+    background: var(--surface);
+    color: var(--text);
+    font: 500 12px var(--font);
+}
+
+.repeat-interval-input {
+    width: 58px;
+    padding-inline: 7px;
+}
+
+.repeat-unit-select {
+    padding-inline: 6px;
+}
+
+.repeat-picker-actions {
+    display: grid;
+    grid-template-columns: 1fr auto auto;
+    gap: 6px;
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid var(--border-light);
+}
+
+.repeat-picker-action {
+    padding: 6px 9px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-xs);
+    background: transparent;
+    color: var(--text-secondary);
+    font: 600 11px var(--font);
+}
+
+.repeat-picker-action:disabled {
+    opacity: 0.45;
+}
+
+.repeat-picker-action.remove {
+    justify-self: start;
+    color: var(--block-urgent);
+}
+
+.repeat-picker-action.confirm {
+    border-color: var(--primary);
+    background: var(--primary);
     color: white;
 }
 
@@ -1923,6 +2062,49 @@ textarea:focus-visible {
     display: flex;
     flex-direction: column;
     gap: 24px;
+}
+
+.task-options-section {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.task-option-row {
+    display: grid;
+    grid-template-columns: 20px 1fr auto;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius-sm);
+    background: var(--bg-secondary);
+    color: var(--text);
+    font: 500 13px var(--font);
+    text-align: left;
+}
+
+.task-option-row:hover,
+.task-option-row.active {
+    border-color: color-mix(in srgb, var(--primary) 45%, var(--border));
+    background: var(--primary-light);
+}
+
+.task-option-row > svg {
+    width: 17px;
+    height: 17px;
+    color: var(--primary);
+}
+
+.task-option-row small {
+    color: var(--text-secondary);
+    font-size: 11px;
+}
+
+.side-panel-repeat-picker {
+    top: calc(100% + 6px);
+    right: 0;
 }
 
 .subtasks-section {
