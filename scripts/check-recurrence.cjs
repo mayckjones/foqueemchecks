@@ -23,5 +23,7 @@ assert.deepEqual(
     'normaliza configuração personalizada'
 );
 assert.equal(recurrence.getLabel({ type: 'custom', interval: 2, unit: 'month' }), 'A cada 2 meses');
+assert.equal(recurrence.getCategoryForDate('2026-09-21', '2026-09-20'), 'amanha');
+assert.equal(recurrence.getCategoryForDate('2026-09-21', '2026-09-21'), 'hoje');
 
-console.log(`OK: ${cases.length} ciclos de recorrência e 3 normalizações validados.`);
+console.log(`OK: ${cases.length} ciclos de recorrência, 3 normalizações e 2 classificações por data validados.`);

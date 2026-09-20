@@ -23,6 +23,10 @@
     --primary-light: rgba(0,120,212,0.08);
     --primary-glow: rgba(0,120,212,0.2);
 
+    --my-day: #FFD75A;
+    --my-day-bg: rgba(255,215,90,0.11);
+    --my-day-border: rgba(255,215,90,0.42);
+
     --block-urgent: #E74C3C;
     --block-urgent-bg: rgba(231,76,60,0.08);
     --block-urgent-border: rgba(231,76,60,0.25);
@@ -104,6 +108,9 @@
 
     --primary-light: rgba(0,120,212,0.15);
     --primary-glow: rgba(0,120,212,0.3);
+
+    --my-day-bg: rgba(255,215,90,0.16);
+    --my-day-border: rgba(255,215,90,0.5);
 
     --block-urgent-bg: rgba(231,76,60,0.12);
     --block-urgent-border: rgba(231,76,60,0.3);
@@ -256,6 +263,28 @@ body {
     width: 16px;
     height: 16px;
     flex-shrink: 0;
+}
+
+.trash-btn {
+    position: relative;
+}
+
+.trash-btn:hover {
+    color: var(--block-urgent);
+}
+
+.trash-count {
+    min-width: 17px;
+    height: 17px;
+    padding: 0 4px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 9px;
+    background: var(--block-urgent);
+    color: white;
+    font-size: 10px;
+    font-weight: 700;
 }
 
 .theme-toggle {
@@ -485,6 +514,38 @@ body {
 .block-card:hover {
     box-shadow: var(--shadow-md);
     background: var(--surface);
+}
+
+.my-day-block {
+    background: linear-gradient(145deg, var(--glass-bg), var(--my-day-bg));
+    border-color: var(--my-day-border);
+}
+
+.my-day-block .block-title {
+    color: var(--my-day);
+    font-weight: 700;
+}
+
+.my-day-block .block-color-dot {
+    box-shadow: 0 0 0 3px var(--my-day-bg);
+}
+
+.my-day-block .block-color-dot.my-day-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    border: 0;
+    background: transparent !important;
+    color: var(--my-day);
+    cursor: default;
+}
+
+.my-day-icon svg {
+    width: 20px;
+    height: 20px;
+    filter: drop-shadow(0 2px 4px rgba(255,215,90,0.28));
 }
 
 .block-card.drag-over {
@@ -1618,6 +1679,171 @@ textarea:focus-visible {
     filter: brightness(1.1);
 }
 
+/* ========== DELETED ITEMS / TRASH ========== */
+.trash-modal-box {
+    width: min(560px, 92vw);
+    max-height: min(680px, 86vh);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-lg);
+    animation: scaleIn 0.2s ease;
+}
+
+.trash-modal-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 18px 20px;
+    border-bottom: 1px solid var(--border-light);
+}
+
+.trash-modal-title-group {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-width: 0;
+}
+
+.trash-modal-icon {
+    width: 36px;
+    height: 36px;
+    display: grid;
+    place-items: center;
+    flex-shrink: 0;
+    border-radius: 10px;
+    background: rgba(231,76,60,0.12);
+    color: var(--block-urgent);
+}
+
+.trash-modal-icon svg {
+    width: 19px;
+    height: 19px;
+}
+
+.trash-modal-title {
+    color: var(--text);
+    font-size: 16px;
+    font-weight: 700;
+}
+
+.trash-modal-subtitle {
+    margin-top: 3px;
+    color: var(--text-secondary);
+    font-size: 12px;
+}
+
+.trash-list {
+    min-height: 120px;
+    padding: 10px;
+    overflow-y: auto;
+}
+
+.trash-item {
+    display: flex;
+    align-items: center;
+    gap: 11px;
+    padding: 11px 10px;
+    border-bottom: 1px solid var(--border-light);
+}
+
+.trash-item:last-child {
+    border-bottom: 0;
+}
+
+.trash-item-icon {
+    width: 32px;
+    height: 32px;
+    display: grid;
+    place-items: center;
+    flex-shrink: 0;
+    border-radius: 9px;
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
+}
+
+.trash-item-icon svg {
+    width: 16px;
+    height: 16px;
+}
+
+.trash-item-content {
+    min-width: 0;
+    flex: 1;
+}
+
+.trash-item-title {
+    overflow: hidden;
+    color: var(--text);
+    font-size: 13px;
+    font-weight: 600;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.trash-item-meta {
+    margin-top: 3px;
+    overflow: hidden;
+    color: var(--text-tertiary);
+    font-size: 11px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.trash-restore-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    flex-shrink: 0;
+    padding: 6px 9px;
+    border: 1px solid var(--primary);
+    border-radius: var(--radius-xs);
+    background: var(--primary-light);
+    color: var(--primary);
+    font: 600 11px var(--font);
+}
+
+.trash-restore-btn:hover {
+    background: var(--primary);
+    color: white;
+}
+
+.trash-restore-btn svg {
+    width: 14px;
+    height: 14px;
+}
+
+.trash-empty {
+    min-height: 190px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    color: var(--text-secondary);
+    text-align: center;
+}
+
+.trash-empty svg {
+    width: 34px;
+    height: 34px;
+    margin-bottom: 4px;
+    color: var(--text-tertiary);
+}
+
+.trash-empty strong {
+    color: var(--text);
+    font-size: 13px;
+}
+
+.trash-empty span {
+    font-size: 12px;
+}
+
 /* ========== INBOX PDF IMPORT TOOLS ========== */
 .inbox-tools-row {
     margin-top: 10px;
@@ -2314,6 +2540,27 @@ textarea:focus-visible {
 }
 
 /* Responsive */
+@media (min-width: 901px) and (max-width: 1280px) {
+    .inbox-panel {
+        width: clamp(340px, 34vw, 420px);
+        min-width: 340px;
+    }
+
+    .blocks-panel {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 14px;
+        padding: 16px;
+    }
+
+    .block-header {
+        padding-inline: 14px;
+    }
+
+    .task-card {
+        padding-inline: 10px;
+    }
+}
+
 @media (max-width: 900px) {
     .main {
         flex-direction: column-reverse;
@@ -2573,11 +2820,24 @@ textarea:focus-visible {
     }
 
     .modal-box,
-    .pdf-modal-box {
+    .pdf-modal-box,
+    .trash-modal-box {
         width: 100%;
         max-width: none;
         max-height: calc(100dvh - 24px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
         border-radius: 18px;
+    }
+
+    .trash-modal-header {
+        padding: 16px;
+    }
+
+    .trash-modal-title {
+        font-size: 17px;
+    }
+
+    .trash-modal-subtitle {
+        font-size: 12px;
     }
 
     .pdf-modal-box {
@@ -2648,7 +2908,8 @@ textarea:focus-visible {
     .side-panel,
     .toast-notification,
     .modal-box,
-    .pdf-modal-box {
+    .pdf-modal-box,
+    .trash-modal-box {
         will-change: transform, opacity;
     }
 }

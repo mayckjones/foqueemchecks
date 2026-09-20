@@ -130,6 +130,18 @@
         return formatLocalDate(candidate);
     }
 
+    function getCategoryForDate(dateValue, referenceValue = today()) {
+        const date = parseLocalDate(dateValue);
+        const reference = parseLocalDate(referenceValue);
+        if (!date || !reference) return null;
+        const todayValue = formatLocalDate(reference);
+        const tomorrowValue = formatLocalDate(addDays(reference, 1));
+        const value = formatLocalDate(date);
+        if (value === todayValue) return 'hoje';
+        if (value === tomorrowValue) return 'amanha';
+        return ['domingo', 'segunda', 'terca', 'quarta', 'quinta', 'sexta', 'sabado'][date.getDay()];
+    }
+
     return {
         TYPES,
         UNITS,
@@ -140,5 +152,6 @@
         configOnly,
         getLabel,
         getNextDate,
+        getCategoryForDate,
     };
 });

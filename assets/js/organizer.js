@@ -4,6 +4,7 @@
 const STORAGE_KEY = 'focusOrganizerState';
 const FOCUS_HANDOFF_KEY = 'focusAppState';
 const RECURRENCE = window.FocusRecurrence;
+const MY_DAY_BLOCK_ID = 'my-day';
 // Apenas a faixa central da tarefa aceita a conversão em subtarefa. As bordas
 // continuam livres para facilitar a reordenação por arrastar e soltar.
 const SUBTASK_DROP_ZONE_RATIO = 0.20;
@@ -27,6 +28,7 @@ const DAY_CONFIG = {
 };
 
 const DEFAULT_BLOCKS = [
+    { id: MY_DAY_BLOCK_ID, title: 'Meu dia',       colorVar: 'important', tasks: [], specialType: 'my-day' },
     { id: genId(), title: 'Urgente',        colorVar: 'urgent',    tasks: [] },
     { id: genId(), title: 'Importante',     colorVar: 'important', tasks: [] },
     { id: genId(), title: 'Pode esperar',   colorVar: 'canwait',   tasks: [] },
@@ -39,6 +41,7 @@ let nextColorIndex = 0;
 let state = {
     inbox: [],
     blocks: [],
+    deletedItems: [],
     activeFilter: 'all',
     searchQuery: '',
     filterOrder: [],
@@ -61,6 +64,7 @@ let blockDragPointer = null;
 let blockDragScrollFrame = null;
 let blockPointerDrag = null;
 let recurrenceWakeTimer = null;
+let dateRefreshTimer = null;
 const collapsedCompletedSections = new Set();
 
 function restoreCollapsedCompletedSections(source) {
@@ -187,6 +191,72 @@ function createTask(text) {
     };
 }
 
+function isMyDayBlock(block) {
+    return Boolean(block && (block.id === MY_DAY_BLOCK_ID || block.specialType === 'my-day'));
+}
+
+function ensureMyDayBlock() {
+    if (!Array.isArray(state.blocks)) {
+        state.blocks = [];
+    }
+    let myDayBlock = state.blocks.find(isMyDayBlock);
+    let changed = false;
+    if (!myDayBlock) {
+        myDayBlock = {
+            id: MY_DAY_BLOCK_ID,
+            title: 'Meu dia',
+            colorVar: 'important',
+            tasks: [],
+            specialType: 'my-day',
+        };
+        state.blocks.unshift(myDayBlock);
+        return true;
+    }
+    if (myDayBlock.specialType !== 'my-day') { myDayBlock.specialType = 'my-day'; changed = true; }
+    if (myDayBlock.title !== 'Meu dia') { myDayBlock.title = 'Meu dia'; changed = true; }
+    if (!Array.isArray(myDayBlock.tasks)) { myDayBlock.tasks = []; changed = true; }
+    const otherBlocks = state.blocks.filter(block => block !== myDayBlock);
+    if (state.blocks[0] !== myDayBlock) {
+        state.blocks = [myDayBlock, ...otherBlocks];
+        changed = true;
+    }
+    return changed;
+}
+
+function setTaskDate(task, date = RECURRENCE.today()) {
+    const category = RECURRENCE.getCategoryForDate(date);
+    task.days = [category, date].filter(Boolean);
+}
+
+function normalizeTaskDates(task) {
+    if (!task || !Array.isArray(task.days)) return false;
+    const exactDate = getTaskExactDate(task);
+    const legacyCategory = task.days.find(day => Object.prototype.hasOwnProperty.call(DAY_CONFIG, day));
+    let normalizedDays = [];
+    if (exactDate) {
+        normalizedDays = [RECURRENCE.getCategoryForDate(exactDate), exactDate].filter(Boolean);
+    } else if (legacyCategory) {
+        const derivedDate = getDateForKey(legacyCategory);
+        normalizedDays = [RECURRENCE.getCategoryForDate(derivedDate), derivedDate].filter(Boolean);
+    }
+    if (JSON.stringify(task.days) === JSON.stringify(normalizedDays)) return false;
+    task.days = normalizedDays;
+    return true;
+}
+
+function normalizeOrganizerTaskDates() {
+    let changed = false;
+    state.inbox.forEach(task => { changed = normalizeTaskDates(task) || changed; });
+    state.blocks.forEach(block => (block.tasks || []).forEach(task => {
+        changed = normalizeTaskDates(task) || changed;
+    }));
+    return changed;
+}
+
+function assignTaskToMyDay(task) {
+    setTaskDate(task);
+}
+
 function getTaskExactDate(task) {
     return (task.days || []).find(day => RECURRENCE.parseLocalDate(day)) || null;
 }
@@ -220,7 +290,9 @@ function normalizeTaskShape(task) {
         task.recurrence = normalizedRecurrence;
         changed = true;
     }
-    return ensureRecurringTaskSchedule(task) || changed;
+    const recurrenceChanged = ensureRecurringTaskSchedule(task);
+    const datesChanged = normalizeTaskDates(task);
+    return recurrenceChanged || datesChanged || changed;
 }
 
 function normalizeOrganizerTasks() {
@@ -308,13 +380,24 @@ function scheduleRecurrenceWakeUp() {
 }
 
 function runRecurrenceActivation() {
+    const datesUpdated = normalizeOrganizerTaskDates();
     const createdCount = materializeDueRecurrences();
-    if (createdCount > 0) {
+    if (createdCount > 0 || datesUpdated) {
         saveState();
         refreshTaskContainersState();
-        showToast(createdCount === 1 ? 'Tarefa recorrente adicionada.' : `${createdCount} tarefas recorrentes adicionadas.`);
+        if (createdCount > 0) {
+            showToast(createdCount === 1 ? 'Tarefa recorrente adicionada.' : `${createdCount} tarefas recorrentes adicionadas.`);
+        }
     }
     scheduleRecurrenceWakeUp();
+    scheduleDateRefresh();
+}
+
+function scheduleDateRefresh() {
+    window.clearTimeout(dateRefreshTimer);
+    const nextMidnight = new Date();
+    nextMidnight.setHours(24, 0, 1, 0);
+    dateRefreshTimer = window.setTimeout(runRecurrenceActivation, Math.max(100, nextMidnight.getTime() - Date.now()));
 }
 
 function normalizeTaskImportance(task) {
@@ -497,6 +580,9 @@ function scrollBlocksWhileDragging(event) {
 }
 
 function rebuildStateFromDOM() {
+    const previousMyDayTaskIds = new Set(
+        state.blocks.find(isMyDayBlock)?.tasks.map(task => task.id) || []
+    );
     const allTasks = new Map();
     state.inbox.forEach(t => allTasks.set(t.id, t));
     state.blocks.forEach(b => b.tasks.forEach(t => allTasks.set(t.id, t)));
@@ -523,7 +609,17 @@ function rebuildStateFromDOM() {
         state.blocks = newBlocks;
     }
 
+    const myDayPositionRestored = ensureMyDayBlock();
+    const myDayBlock = state.blocks.find(isMyDayBlock);
+    myDayBlock.tasks
+        .filter(task => !previousMyDayTaskIds.has(task.id))
+        .forEach(assignTaskToMyDay);
+
     saveState();
+    if (myDayPositionRestored) {
+        renderInitialView();
+        return;
+    }
     refreshTaskContainersState();
     refreshTaskVisibility();
 }
@@ -576,6 +672,7 @@ async function loadState() {
                 if (localHasContent && (!cloudHasContent || localIsNewer)) {
                     state.inbox = localState.inbox || [];
                     state.blocks = localState.blocks || [];
+                    state.deletedItems = Array.isArray(localState.deletedItems) ? localState.deletedItems : [];
                     state.activeFilter = localState.activeFilter || 'all';
                     state.searchQuery = localState.searchQuery || '';
                     state.collapsedCompletedSections = localState.collapsedCompletedSections || [];
@@ -594,6 +691,7 @@ async function loadState() {
                 }
                 state.inbox = cloudState.inbox || [];
                 state.blocks = cloudState.blocks || [];
+                state.deletedItems = Array.isArray(cloudState.deletedItems) ? cloudState.deletedItems : [];
                 state.activeFilter = cloudState.activeFilter || 'all';
                 state.searchQuery = cloudState.searchQuery || '';
                 state.collapsedCompletedSections = cloudState.collapsedCompletedSections || [];
@@ -616,6 +714,7 @@ async function loadState() {
     if (localState) {
         state.inbox = localState.inbox || [];
         state.blocks = localState.blocks || [];
+        state.deletedItems = Array.isArray(localState.deletedItems) ? localState.deletedItems : [];
         state.activeFilter = localState.activeFilter || 'all';
         state.searchQuery = localState.searchQuery || '';
         state.collapsedCompletedSections = localState.collapsedCompletedSections || [];
@@ -702,8 +801,10 @@ function taskMatchesCurrentView(task) {
             if (!hasFutureDate) return false;
         } else if (state.activeFilter === 'important') {
             if (!task.important) return false;
-        } else if (!task.days.includes(state.activeFilter)) {
-            return false;
+        } else {
+            const exactDate = getTaskExactDate(task);
+            const category = exactDate ? RECURRENCE.getCategoryForDate(exactDate) : null;
+            if (category !== state.activeFilter) return false;
         }
     }
 
@@ -715,6 +816,12 @@ function taskMatchesCurrentView(task) {
     }
 
     return true;
+}
+
+function getTaskDayDisplay(task) {
+    const exactDate = getTaskExactDate(task);
+    if (!exactDate) return [];
+    return [RECURRENCE.getCategoryForDate(exactDate), exactDate].filter(Boolean);
 }
 
 function renderTaskCard(task, options = {}) {
@@ -757,10 +864,11 @@ function renderTaskCard(task, options = {}) {
     content.appendChild(textEl);
 
     // Day chips
-    if (task.days.length > 0) {
+    const displayedDays = getTaskDayDisplay(task);
+    if (displayedDays.length > 0) {
         const chipsEl = document.createElement('div');
         chipsEl.className = 'task-chips';
-        task.days.forEach(dayKey => {
+        displayedDays.forEach(dayKey => {
             let cfg = DAY_CONFIG[dayKey];
             if (!cfg && dayKey.match(/^\d{4}-\d{2}-\d{2}$/)) {
                 const [y, m, d] = dayKey.split('-');
@@ -778,7 +886,7 @@ function renderTaskCard(task, options = {}) {
             chip.innerHTML = `${cfg.label}<svg class="remove-chip" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>`;
             chip.addEventListener('click', (e) => {
                 e.stopPropagation();
-                task.days = task.days.filter(d => d !== dayKey);
+                task.days = [];
                 if (task.completed && task.recurrence && !task.recurrence.spawnedTaskId) {
                     delete task.recurrence.nextDate;
                     ensureRecurringTaskSchedule(task);
@@ -1079,15 +1187,7 @@ function getDateForKey(key) {
 }
 
 function getCategoryForDate(dateString) {
-    if (!dateString) return null;
-    const [year, month, day] = dateString.split('-').map(Number);
-    const selectedDate = new Date(year, month - 1, day);
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const diffDays = Math.round((selectedDate.getTime() - today.getTime()) / 86400000);
-    if (diffDays === 0) return 'hoje';
-    if (diffDays === 1) return 'amanha';
-    return ['domingo', 'segunda', 'terca', 'quarta', 'quinta', 'sexta', 'sabado'][selectedDate.getDay()];
+    return RECURRENCE.getCategoryForDate(dateString);
 }
 
 function formatDisplayDate(dateString) {
@@ -1405,6 +1505,149 @@ function getTaskById(taskId) {
     return null;
 }
 
+function cloneData(value) {
+    return JSON.parse(JSON.stringify(value));
+}
+
+function getTaskCollection(location) {
+    if (!location || location.type === 'unknown') return null;
+    if (location.type === 'inbox') return state.inbox;
+    return state.blocks.find(block => block.id === location.blockId)?.tasks || null;
+}
+
+function addDeletedItem(kind, value, source) {
+    if (!Array.isArray(state.deletedItems)) state.deletedItems = [];
+    state.deletedItems.unshift({
+        id: genId(),
+        kind,
+        item: cloneData(value),
+        source: cloneData(source),
+        deletedAt: new Date().toISOString(),
+    });
+}
+
+function getDeletedSourceLabel(entry) {
+    if (entry.kind === 'subtask') {
+        return entry.source?.parentTitle ? `Subtarefa de “${entry.source.parentTitle}”` : 'Subtarefa';
+    }
+    if (entry.source?.type === 'block') return entry.source.blockTitle || 'Bloco';
+    return 'Inbox';
+}
+
+function updateTrashCount() {
+    const count = document.getElementById('trash-count');
+    if (!count) return;
+    const total = Array.isArray(state.deletedItems) ? state.deletedItems.length : 0;
+    count.textContent = total;
+    count.hidden = total === 0;
+}
+
+function renderDeletedItems() {
+    const list = document.getElementById('trash-list');
+    if (!list) return;
+    list.replaceChildren();
+    const deletedItems = Array.isArray(state.deletedItems) ? state.deletedItems : [];
+    if (deletedItems.length === 0) {
+        const empty = document.createElement('div');
+        empty.className = 'trash-empty';
+        empty.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"></path><path d="M8 6V4h8v2"></path><path d="M19 6l-1 15H6L5 6"></path><path d="M10 11v6M14 11v6"></path></svg><strong>A lixeira está vazia</strong><span>Itens excluídos aparecerão aqui.</span>';
+        list.appendChild(empty);
+        updateTrashCount();
+        return;
+    }
+
+    deletedItems.forEach(entry => {
+        const row = document.createElement('div');
+        row.className = 'trash-item';
+        const icon = document.createElement('div');
+        icon.className = 'trash-item-icon';
+        icon.innerHTML = entry.kind === 'subtask'
+            ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 11h10M9 16h7"></path><path d="M5 5h.01M5 11h.01M5 16h.01"></path></svg>'
+            : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="3"></rect><path d="m8 12 2.5 2.5L16 9"></path></svg>';
+        const content = document.createElement('div');
+        content.className = 'trash-item-content';
+        const title = document.createElement('div');
+        title.className = 'trash-item-title';
+        title.textContent = entry.item?.text || 'Item sem título';
+        const meta = document.createElement('div');
+        meta.className = 'trash-item-meta';
+        meta.textContent = `${entry.kind === 'subtask' ? 'Subtarefa' : 'Tarefa'} · ${getDeletedSourceLabel(entry)}`;
+        content.append(title, meta);
+        const restoreButton = document.createElement('button');
+        restoreButton.type = 'button';
+        restoreButton.className = 'trash-restore-btn';
+        restoreButton.title = 'Desfazer exclusão';
+        restoreButton.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7"></path><polyline points="3 4 3 10 9 10"></polyline></svg><span>Desfazer</span>';
+        restoreButton.addEventListener('click', () => restoreDeletedItem(entry.id));
+        row.append(icon, content, restoreButton);
+        list.appendChild(row);
+    });
+    updateTrashCount();
+}
+
+function restoreDeletedItem(deletedId) {
+    const entry = state.deletedItems?.find(item => item.id === deletedId);
+    if (!entry) return;
+
+    if (entry.kind === 'task') {
+        if (getTaskById(entry.item.id)) {
+            showToast('Essa tarefa já existe na lista.');
+            return;
+        }
+        let collection = getTaskCollection(entry.source);
+        let fallback = false;
+        if (!collection) {
+            collection = state.inbox;
+            fallback = true;
+        }
+        const index = Math.max(0, Math.min(Number.isInteger(entry.source?.index) ? entry.source.index : collection.length, collection.length));
+        collection.splice(index, 0, cloneData(entry.item));
+        state.deletedItems = state.deletedItems.filter(item => item.id !== deletedId);
+        saveState();
+        renderInitialView();
+        renderDeletedItems();
+        showToast(fallback ? 'Tarefa restaurada no Inbox; o bloco original não existe mais.' : 'Tarefa restaurada no local original.');
+        return;
+    }
+
+    const parentTask = getTaskById(entry.source?.parentTaskId);
+    if (!parentTask) {
+        showToast('Restaure primeiro a tarefa principal.');
+        return;
+    }
+    if (!Array.isArray(parentTask.subtasks)) parentTask.subtasks = [];
+    if (parentTask.subtasks.some(subtask => subtask.id === entry.item.id)) {
+        showToast('Essa subtarefa já existe na tarefa principal.');
+        return;
+    }
+    const index = Math.max(0, Math.min(Number.isInteger(entry.source?.index) ? entry.source.index : parentTask.subtasks.length, parentTask.subtasks.length));
+    parentTask.subtasks.splice(index, 0, cloneData(entry.item));
+    state.deletedItems = state.deletedItems.filter(item => item.id !== deletedId);
+    saveState();
+    renderSubtasks();
+    refreshTaskCard(parentTask);
+    renderDeletedItems();
+    showToast('Subtarefa restaurada na tarefa original.');
+}
+
+function openTrash() {
+    renderDeletedItems();
+    document.getElementById('trash-modal-overlay')?.classList.add('open');
+}
+
+function closeTrash() {
+    document.getElementById('trash-modal-overlay')?.classList.remove('open');
+}
+
+document.getElementById('btn-trash')?.addEventListener('click', openTrash);
+document.getElementById('trash-modal-close')?.addEventListener('click', closeTrash);
+document.getElementById('trash-modal-overlay')?.addEventListener('click', event => {
+    if (event.target === event.currentTarget) closeTrash();
+});
+document.addEventListener('keydown', event => {
+    if (event.key === 'Escape') closeTrash();
+});
+
 function animateRemoval(element, className, onComplete) {
     if (!element || prefersReducedMotion()) {
         if (element) element.remove();
@@ -1425,10 +1668,32 @@ function animateRemoval(element, className, onComplete) {
 
 function deleteTask(taskId) {
     const location = findTaskLocation(taskId);
+    const collection = getTaskCollection(location);
+    const taskIndex = collection ? collection.findIndex(task => task.id === taskId) : -1;
+    const task = getTaskById(taskId);
+    if (!task || !collection || taskIndex < 0) return;
+    addDeletedItem('task', task, {
+        type: location.type,
+        blockId: location.blockId,
+        blockTitle: location.type === 'block' ? state.blocks.find(block => block.id === location.blockId)?.title : null,
+        index: taskIndex,
+    });
     removeTaskFromSource(taskId);
     saveState();
+    renderDeletedItems();
     const card = document.querySelector(`.task-card[data-task-id="${taskId}"]`);
     animateRemoval(card, 'task-removing', () => refreshTaskContainerState(location));
+}
+
+function createTaskForBlock(block, text) {
+    const task = createTask(text);
+    if (isMyDayBlock(block)) {
+        assignTaskToMyDay(task);
+        return task;
+    }
+    const extractedDay = extractDayFromText(task.text);
+    if (extractedDay) setTaskDate(task, getDateForKey(extractedDay));
+    return task;
 }
 
 // ===========================
@@ -1444,9 +1709,15 @@ function getBlockCSSVars(colorVar) {
 
 function renderBlock(block, options = {}) {
     const colors = getBlockCSSVars(block.colorVar);
+    if (isMyDayBlock(block)) {
+        colors.dot = 'var(--my-day)';
+        colors.bg = 'var(--my-day-bg)';
+        colors.border = 'var(--my-day-border)';
+    }
 
     const card = document.createElement('div');
     card.className = 'block-card';
+    card.classList.toggle('my-day-block', isMyDayBlock(block));
     card.dataset.blockId = block.id;
     // O arraste por ponteiro mantém a roda do mouse disponível durante a ação.
     card.draggable = false;
@@ -1458,7 +1729,7 @@ function renderBlock(block, options = {}) {
         card.addEventListener('animationend', () => card.classList.remove('block-entering'), { once: true });
     }
 
-    const canStartBlockPointerDrag = (target) => (
+    const canStartBlockPointerDrag = (target) => !isMyDayBlock(block) && (
         target.closest('.block-title') || !target.closest(
             'input, textarea, button, .block-color-dot, .color-picker, .task-card'
         )
@@ -1521,9 +1792,13 @@ function renderBlock(block, options = {}) {
     const dot = document.createElement('div');
     dot.className = 'block-color-dot';
     dot.style.background = colors.dot;
-    dot.title = 'Mudar cor do bloco';
+    dot.title = isMyDayBlock(block) ? 'Meu dia é um bloco fixo' : 'Mudar cor do bloco';
+    if (isMyDayBlock(block)) {
+        dot.classList.add('my-day-icon');
+        dot.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4.25" fill="currentColor" stroke="none"></circle><path d="M12 2.75v2M12 19.25v2M4.75 12h-2M21.25 12h-2M5.46 5.46 6.88 6.88M17.12 17.12l1.42 1.42M18.54 5.46l-1.42 1.42M6.88 17.12l-1.42 1.42"></path></svg>';
+    }
 
-    dot.addEventListener('click', (e) => {
+    if (!isMyDayBlock(block)) dot.addEventListener('click', (e) => {
         e.stopPropagation();
         document.querySelectorAll('.color-picker').forEach(p => p.remove());
 
@@ -1563,6 +1838,8 @@ function renderBlock(block, options = {}) {
     titleInput.type = 'text';
     titleInput.className = 'block-title';
     titleInput.value = block.title;
+    titleInput.readOnly = isMyDayBlock(block);
+    if (isMyDayBlock(block)) titleInput.title = 'Meu dia é um bloco fixo';
     titleInput.addEventListener('change', () => {
         block.title = titleInput.value.trim() || 'Sem TÃ­tulo';
         saveState();
@@ -1600,7 +1877,7 @@ function renderBlock(block, options = {}) {
 
     actions.appendChild(count);
     actions.appendChild(focusBtn);
-    actions.appendChild(deleteBtn);
+    if (!isMyDayBlock(block)) actions.appendChild(deleteBtn);
 
     header.appendChild(headerLeft);
     header.appendChild(actions);
@@ -1635,12 +1912,7 @@ function renderBlock(block, options = {}) {
     quickAddInput.addEventListener('keydown', (e) => {
         if (e.key === 'Enter' && quickAddInput.value.trim()) {
             e.preventDefault();
-            const newTask = createTask(quickAddInput.value);
-            // Extract days globally? Sure, why not:
-            const extractedDay = extractDayFromText(newTask.text);
-            if (extractedDay) {
-                newTask.days.push(extractedDay);
-            }
+            const newTask = createTaskForBlock(block, quickAddInput.value);
             block.tasks.push(newTask);
             saveState();
             quickAddInput.value = '';
@@ -1664,9 +1936,7 @@ function renderBlock(block, options = {}) {
 
     quickAddBtn.addEventListener('click', () => {
         if (quickAddInput.value.trim()) {
-            const newTask = createTask(quickAddInput.value);
-            const extractedDay = extractDayFromText(newTask.text);
-            if (extractedDay) newTask.days.push(extractedDay);
+            const newTask = createTaskForBlock(block, quickAddInput.value);
             block.tasks.push(newTask);
             saveState();
             quickAddInput.value = '';
@@ -1726,6 +1996,10 @@ function renderBlock(block, options = {}) {
 async function deleteBlock(blockId) {
     const block = state.blocks.find(b => b.id === blockId);
     if (!block) return;
+    if (isMyDayBlock(block)) {
+        showToast('Meu dia é um bloco fixo e não pode ser removido.');
+        return;
+    }
 
     if (block.tasks.length > 0) {
         const confirmed = await showModal(
@@ -2497,6 +2771,7 @@ pdfBtnConfirm.addEventListener('click', () => {
             const newTask = createTask(task.text);
             if (applyDays && task.days.length > 0) {
                 newTask.days = [...task.days];
+                normalizeTaskDates(newTask);
             }
             
             if (includeSubtasks && task.subtasks.length > 0) {
@@ -2521,6 +2796,7 @@ pdfBtnConfirm.addEventListener('click', () => {
                         const newSubtask = createTask(sub.text);
                         if (applyDays && sub.days.length > 0) {
                             newSubtask.days = [...sub.days];
+                            normalizeTaskDates(newSubtask);
                         }
                         state.inbox.push(newSubtask);
                         importedCount++;
@@ -2619,6 +2895,24 @@ function closeSidePanel() {
     sidePanel.classList.remove('active');
     setSidePanelMode('comparison');
     currentEditingTask = null;
+}
+
+function deleteSubtaskFromTask(task, subtaskIndex) {
+    const subtask = task?.subtasks?.[subtaskIndex];
+    if (!subtask) return;
+    const location = findTaskLocation(task.id);
+    addDeletedItem('subtask', subtask, {
+        parentTaskId: task.id,
+        parentTitle: task.text,
+        type: location.type,
+        blockId: location.blockId,
+        index: subtaskIndex,
+    });
+    task.subtasks.splice(subtaskIndex, 1);
+    saveState();
+    renderDeletedItems();
+    renderSubtasks();
+    refreshTaskCard(task);
 }
 
 document.getElementById('side-panel-close').addEventListener('click', closeSidePanel);
@@ -2734,10 +3028,7 @@ function renderSubtasks() {
         delBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>';
         
         delBtn.addEventListener('click', () => {
-            currentEditingTask.subtasks.splice(index, 1);
-            saveState();
-            renderSubtasks();
-            refreshTaskCard(currentEditingTask);
+            deleteSubtaskFromTask(currentEditingTask, index);
         });
 
         actions.appendChild(promoteBtn);
@@ -2816,9 +3107,10 @@ async function init() {
         // Initialize with default blocks
         state.blocks = DEFAULT_BLOCKS;
     }
+    const myDayEnsured = ensureMyDayBlock();
     const normalizedTasks = normalizeOrganizerTasks();
     const activatedRecurrences = materializeDueRecurrences();
-    if (normalizedTasks || activatedRecurrences > 0) saveState();
+    if (myDayEnsured || normalizedTasks || activatedRecurrences > 0) saveState();
     normalizeFilterOrders(state);
     restoreCollapsedCompletedSections(state);
     applyFilterOrders();
@@ -2839,7 +3131,9 @@ async function init() {
     }
 
     renderInitialView();
+    renderDeletedItems();
     scheduleRecurrenceWakeUp();
+    scheduleDateRefresh();
     document.addEventListener('visibilitychange', () => {
         if (!document.hidden) runRecurrenceActivation();
     });
