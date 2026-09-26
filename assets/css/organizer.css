@@ -948,6 +948,11 @@ body {
     color: var(--text);
     font-family: var(--font);
     font-size: 13px;
+    line-height: 1.4;
+    min-height: 38px;
+    max-height: 112px;
+    resize: none;
+    overflow-y: auto;
     transition: all var(--transition);
 }
 
@@ -2558,6 +2563,10 @@ textarea:focus-visible {
     font-size: 13px;
     color: var(--text);
     font-family: var(--font);
+    line-height: 1.4;
+    max-height: 96px;
+    resize: none;
+    overflow-y: auto;
     outline: none;
     transition: all 0.2s;
 }

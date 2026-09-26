@@ -173,7 +173,7 @@ function convertTaskToSubtask(sourceTaskId, targetTask) {
     if (!targetTask.subtasks) targetTask.subtasks = [];
     targetTask.subtasks.push({
         id: sourceTask.id,
-        text: sourceTask.text,
+        text: normalizeTaskText(sourceTask.text),
         completed: sourceTask.completed
     });
     removeTaskFromSource(sourceTask.id);
@@ -195,10 +195,19 @@ function genId() {
     return 'id_' + Math.random().toString(36).substr(2, 9) + Date.now().toString(36);
 }
 
+function normalizeTaskText(text) {
+    return String(text || '').trim().replace(/\p{L}/u, letter => letter.toLocaleUpperCase('pt-BR'));
+}
+
+function autoResizeTextArea(element) {
+    element.style.height = 'auto';
+    element.style.height = `${element.scrollHeight}px`;
+}
+
 function createTask(text) {
     return {
         id: genId(),
-        text: text.trim(),
+        text: normalizeTaskText(text),
         completed: false,
         important: false,
         days: [],
@@ -1152,10 +1161,7 @@ function startEditTask(task, textEl, card) {
     input.value = task.text;
     input.rows = 1;
     
-    const adjustHeight = () => {
-        input.style.height = 'auto';
-        input.style.height = input.scrollHeight + 'px';
-    };
+    const adjustHeight = () => autoResizeTextArea(input);
     input.addEventListener('input', adjustHeight);
 
     textEl.replaceWith(input);
@@ -1164,7 +1170,7 @@ function startEditTask(task, textEl, card) {
     adjustHeight();
 
     const finish = () => {
-        const val = input.value.trim();
+        const val = normalizeTaskText(input.value);
         if (val && val !== task.text) {
             task.text = val;
             saveState();
@@ -2058,8 +2064,8 @@ function renderBlock(block, options = {}) {
     quickAddContainer.style.gap = '8px';
     quickAddContainer.style.marginBottom = '12px';
 
-    const quickAddInput = document.createElement('input');
-    quickAddInput.type = 'text';
+    const quickAddInput = document.createElement('textarea');
+    quickAddInput.rows = 1;
     quickAddInput.placeholder = '+ Adicionar tarefa...';
     quickAddInput.style.flex = '1';
     quickAddInput.style.padding = '8px 12px';
@@ -2068,17 +2074,23 @@ function renderBlock(block, options = {}) {
     quickAddInput.style.background = 'var(--bg)';
     quickAddInput.style.color = 'var(--text)';
     quickAddInput.style.fontSize = '13px';
+    quickAddInput.style.lineHeight = '1.4';
+    quickAddInput.style.resize = 'none';
+    quickAddInput.style.overflowY = 'auto';
+    quickAddInput.style.maxHeight = '96px';
+    quickAddInput.addEventListener('input', () => autoResizeTextArea(quickAddInput));
     
     quickAddInput.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter' && quickAddInput.value.trim()) {
-            e.preventDefault();
-            const newTask = createTaskForBlock(block, quickAddInput.value);
-            block.tasks.push(newTask);
-            saveState();
-            quickAddInput.value = '';
-            refreshTaskContainerState({ type: 'block', blockId: block.id }, { animateNew: true });
-            quickAddInput.focus();
-        }
+        if (e.key !== 'Enter' || e.shiftKey) return;
+        e.preventDefault();
+        if (!quickAddInput.value.trim()) return;
+        const newTask = createTaskForBlock(block, quickAddInput.value);
+        block.tasks.push(newTask);
+        saveState();
+        quickAddInput.value = '';
+        autoResizeTextArea(quickAddInput);
+        refreshTaskContainerState({ type: 'block', blockId: block.id }, { animateNew: true });
+        quickAddInput.focus();
     });
 
     const quickAddBtn = document.createElement('button');
@@ -2100,6 +2112,7 @@ function renderBlock(block, options = {}) {
             block.tasks.push(newTask);
             saveState();
             quickAddInput.value = '';
+            autoResizeTextArea(quickAddInput);
             refreshTaskContainerState({ type: 'block', blockId: block.id }, { animateNew: true });
             quickAddInput.focus();
         }
@@ -2421,6 +2434,15 @@ inboxPanel.addEventListener('drop', (e) => {
 const inboxInput = document.getElementById('inbox-input');
 const btnInboxAdd = document.getElementById('btn-inbox-add');
 
+function addInboxTask(text) {
+    const normalizedText = normalizeTaskText(text);
+    if (!normalizedText) return false;
+    state.inbox.push(createTask(normalizedText));
+    saveState();
+    refreshTaskContainerState({ type: 'inbox', blockId: null }, { animateNew: true });
+    return true;
+}
+
 function addInboxTasks(text) {
     const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
     lines.forEach(line => {
@@ -2433,21 +2455,20 @@ function addInboxTasks(text) {
 }
 
 btnInboxAdd.addEventListener('click', () => {
-    const val = inboxInput.value.trim();
-    if (val) {
-        addInboxTasks(val);
+    if (addInboxTask(inboxInput.value)) {
         inboxInput.value = '';
+        autoResizeTextArea(inboxInput);
         inboxInput.focus();
     }
 });
 
+inboxInput.addEventListener('input', () => autoResizeTextArea(inboxInput));
 inboxInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
-        const val = inboxInput.value.trim();
-        if (val) {
-            addInboxTasks(val);
+        if (addInboxTask(inboxInput.value)) {
             inboxInput.value = '';
+            autoResizeTextArea(inboxInput);
         }
     }
 });
@@ -2461,6 +2482,7 @@ inboxInput.addEventListener('paste', (e) => {
         const allText = existing ? existing + '\n' + pasted : pasted;
         addInboxTasks(allText);
         inboxInput.value = '';
+        autoResizeTextArea(inboxInput);
     }
 });
 
@@ -2942,7 +2964,7 @@ pdfBtnConfirm.addEventListener('click', () => {
                     if (selectedPreviewKeys.has(subKey)) {
                         newTask.subtasks.push({
                             id: genId(),
-                            text: sub.text,
+                            text: normalizeTaskText(sub.text),
                             completed: false
                         });
                     }
@@ -3137,10 +3159,7 @@ function renderSubtasks() {
             input.value = subtask.text;
             input.rows = 1;
             
-            const adjustHeight = () => {
-                input.style.height = 'auto';
-                input.style.height = input.scrollHeight + 'px';
-            };
+            const adjustHeight = () => autoResizeTextArea(input);
             input.addEventListener('input', adjustHeight);
 
             textEl.replaceWith(input);
@@ -3149,7 +3168,7 @@ function renderSubtasks() {
             adjustHeight();
 
             const finish = () => {
-                const val = input.value.trim();
+                const val = normalizeTaskText(input.value);
                 if (val && val !== subtask.text) {
                     subtask.text = val;
                     saveState();
@@ -3236,10 +3255,11 @@ subtaskListEl.addEventListener('drop', (e) => {
     }
 });
 
+subtaskInputEl.addEventListener('input', () => autoResizeTextArea(subtaskInputEl));
 subtaskInputEl.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && currentEditingTask) {
+    if (e.key === 'Enter' && !e.shiftKey && currentEditingTask) {
         e.preventDefault();
-        const val = subtaskInputEl.value.trim();
+        const val = normalizeTaskText(subtaskInputEl.value);
         if (val) {
             if (!currentEditingTask.subtasks) currentEditingTask.subtasks = [];
             currentEditingTask.subtasks.push({
@@ -3251,6 +3271,7 @@ subtaskInputEl.addEventListener('keydown', (e) => {
             renderSubtasks();
             refreshTaskCard(currentEditingTask);
             subtaskInputEl.value = '';
+            autoResizeTextArea(subtaskInputEl);
         }
     }
 });
