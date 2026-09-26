@@ -47,6 +47,7 @@ let state = {
     filterOrder: [],
     weekdayOrder: [],
     collapsedCompletedSections: [],
+    hiddenBlockIds: [],
 };
 
 const DEFAULT_FILTER_ORDER = ['all', 'important', 'atrasadas', 'hoje', 'amanha', 'weekdays', 'futuras'];
@@ -66,6 +67,21 @@ let blockPointerDrag = null;
 let recurrenceWakeTimer = null;
 let dateRefreshTimer = null;
 const collapsedCompletedSections = new Set();
+
+function normalizeHiddenBlockIds(source) {
+    const validIds = new Set(state.blocks.map(block => block.id));
+    const normalized = [...new Set(
+        (Array.isArray(source?.hiddenBlockIds) ? source.hiddenBlockIds : [])
+            .filter(id => typeof id === 'string' && validIds.has(id))
+    )];
+    const changed = JSON.stringify(state.hiddenBlockIds || []) !== JSON.stringify(normalized);
+    state.hiddenBlockIds = normalized;
+    return changed;
+}
+
+function isBlockHidden(block) {
+    return Boolean(block && state.hiddenBlockIds.includes(block.id));
+}
 
 function restoreCollapsedCompletedSections(source) {
     const savedSections = Array.isArray(source?.collapsedCompletedSections)
@@ -125,7 +141,7 @@ function commitDrop(e) {
     if (!dragData || !pendingDrop) return;
     e.preventDefault();
     e.stopPropagation();
-    const positions = captureLayout(dragData.blockId ? '.block-card' : '.task-card:not(.hidden-by-filter)');
+    const positions = captureLayout(dragData.blockId ? '.block-card:not([hidden])' : '.task-card:not(.hidden-by-filter)');
     const dragging = document.querySelector(dragData.blockId ? '.dragging-block' : '.dragging');
     const { container, before, swapWith } = pendingDrop;
     if (dragging && swapWith && swapWith !== dragging) {
@@ -428,7 +444,7 @@ function getDragAfterElement(container, y) {
 }
 
 function getDragDropTargetBlock(container, x, y) {
-    const blocks = [...container.querySelectorAll('.block-card:not(.dragging-block)')]
+    const blocks = [...container.querySelectorAll('.block-card:not(.dragging-block):not([hidden])')]
         .map(element => ({ element, box: element.getBoundingClientRect() }));
     if (blocks.length === 0) return null;
 
@@ -497,7 +513,7 @@ function getDragDropTargetBlock(container, x, y) {
 
 function previewBlockDrop(blocksPanel, x, y) {
     const dragging = document.querySelector('.dragging-block');
-    const swapTarget = [...blocksPanel.querySelectorAll('.block-card:not(.dragging-block)')].find(card => {
+    const swapTarget = [...blocksPanel.querySelectorAll('.block-card:not(.dragging-block):not([hidden])')].find(card => {
         const box = card.getBoundingClientRect();
         return x >= box.left && x <= box.right && y >= box.top && y <= box.bottom;
     });
@@ -676,6 +692,7 @@ async function loadState() {
                     state.activeFilter = localState.activeFilter || 'all';
                     state.searchQuery = localState.searchQuery || '';
                     state.collapsedCompletedSections = localState.collapsedCompletedSections || [];
+                    state.hiddenBlockIds = localState.hiddenBlockIds || [];
                     normalizeFilterOrders(localState);
                     normalizeOrganizerTaskImportance();
                     window.FocusCloud?.showStatus(
@@ -695,6 +712,7 @@ async function loadState() {
                 state.activeFilter = cloudState.activeFilter || 'all';
                 state.searchQuery = cloudState.searchQuery || '';
                 state.collapsedCompletedSections = cloudState.collapsedCompletedSections || [];
+                state.hiddenBlockIds = cloudState.hiddenBlockIds || [];
                 normalizeFilterOrders(cloudState);
                 const normalized = normalizeOrganizerTaskImportance();
                 window.FocusCloud.writeLocalState(STORAGE_KEY, state, {
@@ -718,6 +736,7 @@ async function loadState() {
         state.activeFilter = localState.activeFilter || 'all';
         state.searchQuery = localState.searchQuery || '';
         state.collapsedCompletedSections = localState.collapsedCompletedSections || [];
+        state.hiddenBlockIds = localState.hiddenBlockIds || [];
         normalizeFilterOrders(localState);
         normalizeOrganizerTaskImportance();
         return true;
@@ -1707,6 +1726,137 @@ function getBlockCSSVars(colorVar) {
     };
 }
 
+function closeHiddenBlocksMenu() {
+    const toggle = document.getElementById('hidden-blocks-toggle');
+    const menu = document.getElementById('hidden-blocks-menu');
+    if (!toggle || !menu) return;
+    toggle.setAttribute('aria-expanded', 'false');
+    menu.hidden = true;
+}
+
+function positionHiddenBlocksMenu() {
+    const toggle = document.getElementById('hidden-blocks-toggle');
+    const menu = document.getElementById('hidden-blocks-menu');
+    if (!toggle || !menu || menu.hidden) return;
+    const toggleBox = toggle.getBoundingClientRect();
+    const availableWidth = Math.max(0, window.innerWidth - 16);
+    const menuWidth = Math.min(300, availableWidth);
+    const left = Math.max(8, Math.min(toggleBox.right - menuWidth, window.innerWidth - menuWidth - 8));
+    menu.style.left = `${left}px`;
+    menu.style.top = `${toggleBox.bottom + 8}px`;
+}
+
+function renderHiddenBlocksControl() {
+    const control = document.getElementById('hidden-blocks-control');
+    const label = document.getElementById('hidden-blocks-label');
+    const menu = document.getElementById('hidden-blocks-menu');
+    if (!control || !label || !menu) return;
+
+    const hiddenBlocks = state.blocks.filter(isBlockHidden);
+    control.hidden = hiddenBlocks.length === 0;
+    label.textContent = `Blocos ocultos (${hiddenBlocks.length})`;
+    menu.replaceChildren();
+
+    if (hiddenBlocks.length === 0) {
+        closeHiddenBlocksMenu();
+        return;
+    }
+
+    const title = document.createElement('div');
+    title.className = 'hidden-blocks-menu-title';
+    title.textContent = 'Voltar para a tela principal';
+    menu.appendChild(title);
+
+    hiddenBlocks.forEach(block => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'hidden-block-restore';
+        button.title = `Mostrar o bloco ${block.title}`;
+
+        const dot = document.createElement('span');
+        dot.className = 'hidden-block-restore-dot';
+        dot.style.background = isMyDayBlock(block) ? 'var(--my-day)' : getBlockCSSVars(block.colorVar).dot;
+        const text = document.createElement('span');
+        text.textContent = block.title;
+        button.append(dot, text);
+        button.addEventListener('click', () => restoreBlock(block.id));
+        menu.appendChild(button);
+    });
+
+    if (hiddenBlocks.length > 1) {
+        const restoreAllButton = document.createElement('button');
+        restoreAllButton.type = 'button';
+        restoreAllButton.className = 'hidden-block-restore hidden-block-restore-all';
+        restoreAllButton.textContent = 'Mostrar todos os blocos';
+        restoreAllButton.addEventListener('click', restoreAllBlocks);
+        menu.appendChild(restoreAllButton);
+    }
+}
+
+function minimizeBlock(blockId) {
+    const block = state.blocks.find(item => item.id === blockId);
+    const card = document.querySelector(`.block-card[data-block-id="${blockId}"]`);
+    if (!block || !card || isBlockHidden(block)) return;
+
+    const positions = captureLayout('.block-card:not([hidden])');
+    state.hiddenBlockIds.push(blockId);
+    card.hidden = true;
+    saveState();
+    renderHiddenBlocksControl();
+    animateLayoutFrom(positions);
+    showToast(`Bloco “${block.title}” ocultado.`);
+}
+
+function restoreBlock(blockId) {
+    const block = state.blocks.find(item => item.id === blockId);
+    const card = document.querySelector(`.block-card[data-block-id="${blockId}"]`);
+    if (!block || !card || !isBlockHidden(block)) return;
+
+    const positions = captureLayout('.block-card:not([hidden])');
+    state.hiddenBlockIds = state.hiddenBlockIds.filter(id => id !== blockId);
+    card.hidden = false;
+    if (!prefersReducedMotion()) {
+        card.classList.add('block-entering');
+        card.addEventListener('animationend', () => card.classList.remove('block-entering'), { once: true });
+    }
+    saveState();
+    renderHiddenBlocksControl();
+    closeHiddenBlocksMenu();
+    animateLayoutFrom(positions);
+    showToast(`Bloco “${block.title}” voltou para a tela.`);
+}
+
+function restoreAllBlocks() {
+    const positions = captureLayout('.block-card:not([hidden])');
+    state.hiddenBlockIds = [];
+    document.querySelectorAll('.block-card[hidden]').forEach(card => { card.hidden = false; });
+    saveState();
+    renderHiddenBlocksControl();
+    animateLayoutFrom(positions);
+    showToast('Todos os blocos voltaram para a tela.');
+}
+
+function initHiddenBlocksControl() {
+    const control = document.getElementById('hidden-blocks-control');
+    const toggle = document.getElementById('hidden-blocks-toggle');
+    const menu = document.getElementById('hidden-blocks-menu');
+    if (!control || !toggle || !menu) return;
+
+    toggle.addEventListener('click', () => {
+        const willOpen = menu.hidden;
+        menu.hidden = !willOpen;
+        toggle.setAttribute('aria-expanded', String(willOpen));
+        if (willOpen) positionHiddenBlocksMenu();
+    });
+    document.addEventListener('click', event => {
+        if (!control.contains(event.target)) closeHiddenBlocksMenu();
+    });
+    document.addEventListener('keydown', event => {
+        if (event.key === 'Escape') closeHiddenBlocksMenu();
+    });
+    window.addEventListener('resize', closeHiddenBlocksMenu);
+}
+
 function renderBlock(block, options = {}) {
     const colors = getBlockCSSVars(block.colorVar);
     if (isMyDayBlock(block)) {
@@ -1719,6 +1869,7 @@ function renderBlock(block, options = {}) {
     card.className = 'block-card';
     card.classList.toggle('my-day-block', isMyDayBlock(block));
     card.dataset.blockId = block.id;
+    card.hidden = isBlockHidden(block);
     // O arraste por ponteiro mantém a roda do mouse disponível durante a ação.
     card.draggable = false;
     card.style.borderTopColor = colors.dot;
@@ -1869,6 +2020,14 @@ function renderBlock(block, options = {}) {
     focusBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>';
     focusBtn.addEventListener('click', () => focusOnBlock(block));
 
+    const minimizeBtn = document.createElement('button');
+    minimizeBtn.className = 'block-action-btn';
+    minimizeBtn.type = 'button';
+    minimizeBtn.title = 'Ocultar bloco da tela principal';
+    minimizeBtn.setAttribute('aria-label', `Ocultar o bloco ${block.title}`);
+    minimizeBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"></path></svg>';
+    minimizeBtn.addEventListener('click', () => minimizeBlock(block.id));
+
     const deleteBtn = document.createElement('button');
     deleteBtn.className = 'block-action-btn danger';
     deleteBtn.title = 'Remover bloco';
@@ -1876,6 +2035,7 @@ function renderBlock(block, options = {}) {
     deleteBtn.addEventListener('click', () => deleteBlock(block.id));
 
     actions.appendChild(count);
+    actions.appendChild(minimizeBtn);
     actions.appendChild(focusBtn);
     if (!isMyDayBlock(block)) actions.appendChild(deleteBtn);
 
@@ -2012,6 +2172,7 @@ async function deleteBlock(blockId) {
     }
 
     state.blocks = state.blocks.filter(b => b.id !== blockId);
+    state.hiddenBlockIds = state.hiddenBlockIds.filter(id => id !== blockId);
     saveState();
     const blockCard = document.querySelector(`.block-card[data-block-id="${blockId}"]`);
     animateRemoval(blockCard, 'block-removing', () => {
@@ -2173,6 +2334,7 @@ function renderInitialView() {
     addBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg> Novo Bloco';
     addBtn.addEventListener('click', addBlock);
     blocksPanel.appendChild(addBtn);
+    renderHiddenBlocksControl();
 
     blocksPanel.ondragover = (e) => {
         if (dragData && dragData.blockId) {
@@ -3108,9 +3270,10 @@ async function init() {
         state.blocks = DEFAULT_BLOCKS;
     }
     const myDayEnsured = ensureMyDayBlock();
+    const hiddenBlocksNormalized = normalizeHiddenBlockIds(state);
     const normalizedTasks = normalizeOrganizerTasks();
     const activatedRecurrences = materializeDueRecurrences();
-    if (myDayEnsured || normalizedTasks || activatedRecurrences > 0) saveState();
+    if (myDayEnsured || hiddenBlocksNormalized || normalizedTasks || activatedRecurrences > 0) saveState();
     normalizeFilterOrders(state);
     restoreCollapsedCompletedSections(state);
     applyFilterOrders();
@@ -3130,6 +3293,7 @@ async function init() {
         });
     }
 
+    initHiddenBlocksControl();
     renderInitialView();
     renderDeletedItems();
     scheduleRecurrenceWakeUp();

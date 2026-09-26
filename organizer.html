@@ -67,6 +67,14 @@
         </div>
         <button class="filter-chip filter-orderable" data-filter="futuras" data-order-id="futuras"><span class="chip-dot" style="background:var(--text-tertiary)"></span>Futuras</button>
 
+        <div class="hidden-blocks-control" id="hidden-blocks-control" hidden>
+            <button class="filter-chip hidden-blocks-toggle" id="hidden-blocks-toggle" type="button" aria-expanded="false" aria-controls="hidden-blocks-menu">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12s3.5-6 9-6 9 6 9 6-3.5 6-9 6-9-6-9-6Z"></path><circle cx="12" cy="12" r="2.5"></circle></svg>
+                <span id="hidden-blocks-label">Blocos ocultos</span>
+            </button>
+            <div class="hidden-blocks-menu" id="hidden-blocks-menu" hidden></div>
+        </div>
+
         <div class="search-container">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
             <input type="text" class="search-input" id="search-input" placeholder="Buscar tarefas...">
