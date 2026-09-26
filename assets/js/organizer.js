@@ -249,7 +249,7 @@ function ensureMyDayBlock() {
 }
 
 function setTaskDate(task, date = RECURRENCE.today()) {
-    const category = RECURRENCE.getCategoryForDate(date);
+    const category = getCategoryForDate(date);
     task.days = [category, date].filter(Boolean);
 }
 
@@ -259,10 +259,10 @@ function normalizeTaskDates(task) {
     const legacyCategory = task.days.find(day => Object.prototype.hasOwnProperty.call(DAY_CONFIG, day));
     let normalizedDays = [];
     if (exactDate) {
-        normalizedDays = [RECURRENCE.getCategoryForDate(exactDate), exactDate].filter(Boolean);
+        normalizedDays = [getCategoryForDate(exactDate), exactDate].filter(Boolean);
     } else if (legacyCategory) {
         const derivedDate = getDateForKey(legacyCategory);
-        normalizedDays = [RECURRENCE.getCategoryForDate(derivedDate), derivedDate].filter(Boolean);
+        normalizedDays = [getCategoryForDate(derivedDate), derivedDate].filter(Boolean);
     }
     if (JSON.stringify(task.days) === JSON.stringify(normalizedDays)) return false;
     task.days = normalizedDays;
@@ -368,6 +368,7 @@ function materializeDueRecurrences() {
     const collections = [state.inbox, ...state.blocks.map(block => block.tasks)];
 
     collections.forEach(tasks => {
+        const occurrencesToAdd = [];
         [...tasks].forEach(task => {
             const recurrence = RECURRENCE.normalize(task.recurrence);
             if (!task.completed || !recurrence?.nextDate || recurrence.spawnedTaskId || recurrence.nextDate > today) return;
@@ -375,12 +376,14 @@ function materializeDueRecurrences() {
             const occurrence = buildRecurringOccurrence(task, recurrence.nextDate);
             const existing = getTaskById(occurrence.id);
             if (!existing) {
-                const taskIndex = tasks.indexOf(task);
-                tasks.splice(taskIndex + 1, 0, occurrence);
-                createdCount++;
+                occurrencesToAdd.push(occurrence);
             }
             task.recurrence = { ...recurrence, spawnedTaskId: occurrence.id };
         });
+        if (occurrencesToAdd.length > 0) {
+            tasks.unshift(...occurrencesToAdd);
+            createdCount += occurrencesToAdd.length;
+        }
     });
 
     return createdCount;
@@ -831,7 +834,7 @@ function taskMatchesCurrentView(task) {
             if (!task.important) return false;
         } else {
             const exactDate = getTaskExactDate(task);
-            const category = exactDate ? RECURRENCE.getCategoryForDate(exactDate) : null;
+            const category = exactDate ? getCategoryForDate(exactDate) : null;
             if (category !== state.activeFilter) return false;
         }
     }
@@ -849,7 +852,7 @@ function taskMatchesCurrentView(task) {
 function getTaskDayDisplay(task) {
     const exactDate = getTaskExactDate(task);
     if (!exactDate) return [];
-    return [RECURRENCE.getCategoryForDate(exactDate), exactDate].filter(Boolean);
+    return [getCategoryForDate(exactDate), exactDate].filter(Boolean);
 }
 
 function renderTaskCard(task, options = {}) {
@@ -898,6 +901,13 @@ function renderTaskCard(task, options = {}) {
         chipsEl.className = 'task-chips';
         displayedDays.forEach(dayKey => {
             let cfg = DAY_CONFIG[dayKey];
+            if (dayKey === 'atrasadas') {
+                cfg = {
+                    label: 'Atrasada',
+                    bg: 'rgba(231,76,60,0.14)',
+                    color: 'var(--status-overdue)'
+                };
+            }
             if (!cfg && dayKey.match(/^\d{4}-\d{2}-\d{2}$/)) {
                 const [y, m, d] = dayKey.split('-');
                 cfg = {
@@ -1124,11 +1134,22 @@ function renderTaskCollection(container, tasks, location, options = {}) {
         section.className = 'completed-tasks-section';
         section.dataset.locationKey = locationKey;
 
+        const header = document.createElement('div');
+        header.className = 'completed-tasks-header';
+
         const toggle = document.createElement('button');
         toggle.type = 'button';
         toggle.className = 'completed-tasks-toggle';
         toggle.setAttribute('aria-expanded', String(!isCollapsed));
         toggle.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg><span>Conclu\u00edda</span><span class="completed-tasks-count"></span>';
+
+        const deleteCompletedButton = document.createElement('button');
+        deleteCompletedButton.type = 'button';
+        deleteCompletedButton.className = 'completed-tasks-delete';
+        deleteCompletedButton.title = 'Excluir todas as tarefas concluídas desta lista';
+        deleteCompletedButton.setAttribute('aria-label', deleteCompletedButton.title);
+        deleteCompletedButton.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6l-1 15H6L5 6m3 0V4h8v2"></path></svg><span>Excluir concluídas</span>';
+        deleteCompletedButton.addEventListener('click', () => deleteCompletedTasks(location));
 
         const list = document.createElement('div');
         list.className = 'completed-tasks-list';
@@ -1149,7 +1170,8 @@ function renderTaskCollection(container, tasks, location, options = {}) {
             saveCollapsedCompletedSections();
         });
 
-        section.append(toggle, list);
+        header.append(toggle, deleteCompletedButton);
+        section.append(header, list);
         container.appendChild(section);
     }
 }
@@ -1212,7 +1234,7 @@ function getDateForKey(key) {
 }
 
 function getCategoryForDate(dateString) {
-    return RECURRENCE.getCategoryForDate(dateString);
+    return RECURRENCE.getTaskCategoryForDate(dateString);
 }
 
 function formatDisplayDate(dateString) {
@@ -1572,6 +1594,8 @@ function renderDeletedItems() {
     if (!list) return;
     list.replaceChildren();
     const deletedItems = Array.isArray(state.deletedItems) ? state.deletedItems : [];
+    const emptyTrashButton = document.getElementById('trash-empty');
+    if (emptyTrashButton) emptyTrashButton.hidden = deletedItems.length === 0;
     if (deletedItems.length === 0) {
         const empty = document.createElement('div');
         empty.className = 'trash-empty';
@@ -1604,7 +1628,17 @@ function renderDeletedItems() {
         restoreButton.title = 'Desfazer exclusão';
         restoreButton.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7"></path><polyline points="3 4 3 10 9 10"></polyline></svg><span>Desfazer</span>';
         restoreButton.addEventListener('click', () => restoreDeletedItem(entry.id));
-        row.append(icon, content, restoreButton);
+        const deleteButton = document.createElement('button');
+        deleteButton.type = 'button';
+        deleteButton.className = 'trash-delete-btn';
+        deleteButton.title = 'Excluir permanentemente';
+        deleteButton.setAttribute('aria-label', `Excluir permanentemente ${entry.item?.text || 'item'}`);
+        deleteButton.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6l-1 15H6L5 6m3 0V4h8v2"></path></svg>';
+        deleteButton.addEventListener('click', () => permanentlyDeleteItem(entry.id));
+        const actions = document.createElement('div');
+        actions.className = 'trash-item-actions';
+        actions.append(restoreButton, deleteButton);
+        row.append(icon, content, actions);
         list.appendChild(row);
     });
     updateTrashCount();
@@ -1655,6 +1689,38 @@ function restoreDeletedItem(deletedId) {
     showToast('Subtarefa restaurada na tarefa original.');
 }
 
+async function permanentlyDeleteItem(deletedId) {
+    const entry = state.deletedItems?.find(item => item.id === deletedId);
+    if (!entry) return;
+    closeTrash();
+    const confirmed = await showModal(
+        'Excluir permanentemente',
+        `“${entry.item?.text || 'Item sem título'}” será excluído sem possibilidade de restauração. Deseja continuar?`
+    );
+    if (confirmed) {
+        state.deletedItems = state.deletedItems.filter(item => item.id !== deletedId);
+        saveState();
+    }
+    openTrash();
+    if (confirmed) showToast('Item excluído permanentemente.');
+}
+
+async function emptyTrash() {
+    const total = Array.isArray(state.deletedItems) ? state.deletedItems.length : 0;
+    if (total === 0) return;
+    closeTrash();
+    const confirmed = await showModal(
+        'Esvaziar lixeira',
+        `${total} item(ns) serão excluídos permanentemente e não poderão ser restaurados. Deseja continuar?`
+    );
+    if (confirmed) {
+        state.deletedItems = [];
+        saveState();
+    }
+    openTrash();
+    if (confirmed) showToast('Lixeira esvaziada permanentemente.');
+}
+
 function openTrash() {
     renderDeletedItems();
     document.getElementById('trash-modal-overlay')?.classList.add('open');
@@ -1666,6 +1732,7 @@ function closeTrash() {
 
 document.getElementById('btn-trash')?.addEventListener('click', openTrash);
 document.getElementById('trash-modal-close')?.addEventListener('click', closeTrash);
+document.getElementById('trash-empty')?.addEventListener('click', emptyTrash);
 document.getElementById('trash-modal-overlay')?.addEventListener('click', event => {
     if (event.target === event.currentTarget) closeTrash();
 });
@@ -1708,6 +1775,44 @@ function deleteTask(taskId) {
     renderDeletedItems();
     const card = document.querySelector(`.task-card[data-task-id="${taskId}"]`);
     animateRemoval(card, 'task-removing', () => refreshTaskContainerState(location));
+}
+
+async function deleteCompletedTasks(location) {
+    const collection = getTaskCollection(location);
+    if (!collection) return;
+    const completedEntries = collection
+        .map((task, index) => ({ task, index }))
+        .filter(entry => entry.task.completed);
+    if (completedEntries.length === 0) return;
+
+    const confirmed = await showModal(
+        'Excluir tarefas concluídas',
+        `${completedEntries.length} tarefa(s) concluída(s) serão movidas para a lixeira. Deseja continuar?`
+    );
+    if (!confirmed) return;
+
+    const blockTitle = location.type === 'block'
+        ? state.blocks.find(block => block.id === location.blockId)?.title
+        : null;
+    completedEntries.forEach(({ task, index }) => {
+        addDeletedItem('task', task, {
+            type: location.type,
+            blockId: location.blockId,
+            blockTitle,
+            index,
+        });
+    });
+    [...completedEntries].reverse().forEach(({ index }) => collection.splice(index, 1));
+
+    collapsedCompletedSections.delete(getTaskLocationKey(location));
+    state.collapsedCompletedSections = [...collapsedCompletedSections];
+    saveState();
+    scheduleRecurrenceWakeUp();
+    renderDeletedItems();
+    refreshTaskContainerState(location);
+    showToast(completedEntries.length === 1
+        ? 'Tarefa concluída movida para a lixeira.'
+        : `${completedEntries.length} tarefas concluídas movidas para a lixeira.`);
 }
 
 function createTaskForBlock(block, text) {

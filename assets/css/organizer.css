@@ -1060,8 +1060,15 @@ body {
     display: none;
 }
 
+.completed-tasks-header {
+    display: flex;
+    align-items: stretch;
+    gap: 6px;
+}
+
 .completed-tasks-toggle {
-    width: 100%;
+    min-width: 0;
+    flex: 1;
     min-height: 34px;
     display: flex;
     align-items: center;
@@ -1077,6 +1084,33 @@ body {
     text-align: left;
     cursor: pointer;
     transition: background-color var(--transition), color var(--transition);
+}
+
+.completed-tasks-delete {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    flex: 0 0 auto;
+    padding: 7px 9px;
+    border: 1px solid rgba(231,76,60,0.28);
+    border-radius: var(--radius-sm);
+    background: rgba(231,76,60,0.08);
+    color: var(--block-urgent);
+    font: 600 11px var(--font);
+    cursor: pointer;
+    transition: background-color var(--transition), color var(--transition), border-color var(--transition);
+}
+
+.completed-tasks-delete:hover {
+    border-color: var(--block-urgent);
+    background: var(--block-urgent);
+    color: white;
+}
+
+.completed-tasks-delete svg {
+    width: 13px;
+    height: 13px;
 }
 
 .completed-tasks-toggle:hover {
@@ -1783,6 +1817,42 @@ textarea:focus-visible {
     border-bottom: 1px solid var(--border-light);
 }
 
+.trash-modal-actions,
+.trash-item-actions {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    flex: 0 0 auto;
+}
+
+.trash-empty-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 7px 9px;
+    border: 1px solid rgba(231,76,60,0.3);
+    border-radius: var(--radius-xs);
+    background: rgba(231,76,60,0.08);
+    color: var(--block-urgent);
+    font: 600 11px var(--font);
+    cursor: pointer;
+}
+
+.trash-empty-btn svg {
+    width: 14px;
+    height: 14px;
+}
+
+.trash-empty-btn[hidden] {
+    display: none;
+}
+
+.trash-empty-btn:hover {
+    border-color: var(--block-urgent);
+    background: var(--block-urgent);
+    color: white;
+}
+
 .trash-modal-title-group {
     display: flex;
     align-items: center;
@@ -1894,6 +1964,31 @@ textarea:focus-visible {
 }
 
 .trash-restore-btn svg {
+    width: 14px;
+    height: 14px;
+}
+
+.trash-delete-btn {
+    width: 30px;
+    height: 30px;
+    display: inline-grid;
+    place-items: center;
+    flex: 0 0 30px;
+    padding: 0;
+    border: 1px solid rgba(231,76,60,0.3);
+    border-radius: var(--radius-xs);
+    background: rgba(231,76,60,0.08);
+    color: var(--block-urgent);
+    cursor: pointer;
+}
+
+.trash-delete-btn:hover {
+    border-color: var(--block-urgent);
+    background: var(--block-urgent);
+    color: white;
+}
+
+.trash-delete-btn svg {
     width: 14px;
     height: 14px;
 }
@@ -2915,6 +3010,19 @@ textarea:focus-visible {
 
     .trash-modal-header {
         padding: 16px;
+    }
+
+    .completed-tasks-delete span,
+    .trash-empty-btn span,
+    .trash-restore-btn span {
+        display: none;
+    }
+
+    .completed-tasks-delete,
+    .trash-empty-btn {
+        width: 34px;
+        min-width: 34px;
+        padding-inline: 0;
     }
 
     .trash-modal-title {

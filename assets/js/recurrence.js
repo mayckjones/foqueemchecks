@@ -142,6 +142,14 @@
         return ['domingo', 'segunda', 'terca', 'quarta', 'quinta', 'sexta', 'sabado'][date.getDay()];
     }
 
+    function getTaskCategoryForDate(dateValue, referenceValue = today()) {
+        const date = parseLocalDate(dateValue);
+        const reference = parseLocalDate(referenceValue);
+        if (!date || !reference) return null;
+        if (formatLocalDate(date) < formatLocalDate(reference)) return 'atrasadas';
+        return getCategoryForDate(dateValue, referenceValue);
+    }
+
     return {
         TYPES,
         UNITS,
@@ -153,5 +161,6 @@
         getLabel,
         getNextDate,
         getCategoryForDate,
+        getTaskCategoryForDate,
     };
 });

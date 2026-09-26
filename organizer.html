@@ -142,12 +142,18 @@
                     </div>
                     <div>
                         <div class="trash-modal-title" id="trash-modal-title">Tarefas excluídas</div>
-                        <div class="trash-modal-subtitle">Restaure uma tarefa ou subtarefa para o local original</div>
+                        <div class="trash-modal-subtitle">Restaure ou exclua permanentemente os itens</div>
                     </div>
                 </div>
-                <button class="block-action-btn" id="trash-modal-close" type="button" title="Fechar">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-                </button>
+                <div class="trash-modal-actions">
+                    <button class="trash-empty-btn" id="trash-empty" type="button" title="Esvaziar lixeira" hidden>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6l-1 15H6L5 6m3 0V4h8v2"></path></svg>
+                        <span>Esvaziar lixeira</span>
+                    </button>
+                    <button class="block-action-btn" id="trash-modal-close" type="button" title="Fechar">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                    </button>
+                </div>
             </div>
             <div class="trash-list" id="trash-list"></div>
         </div>
